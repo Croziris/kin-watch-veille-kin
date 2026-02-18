@@ -91,8 +91,8 @@ serve(async (req) => {
         date_publication: props["Date de publication"]?.date?.start || null,
         lien: props["Lien"]?.url || "",
         image_url: props["URL de l'image"]?.url || null,
-        tags_anatomique: props["Tag anatomique"]?.multi_select?.map((t: any) => t.name) || [],
-        tags_contenu: props["Tag contenu"]?.multi_select?.map((t: any) => t.name) || [],
+        tags_anatomique: props["Tag anatomique"]?.multi_select?.map((t: { name: string }) => t.name) ?? [],
+        tags_contenu: props["Tag contenu"]?.multi_select?.map((t: { name: string }) => t.name) ?? [],
       };
     });
 

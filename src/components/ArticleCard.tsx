@@ -1,4 +1,5 @@
 import { ImageIcon } from "lucide-react";
+import { useState } from "react";
 import { Article, SOURCE_LOGOS } from "@/lib/constants";
 
 const formatDate = (dateStr: string | null): string => {
@@ -13,7 +14,12 @@ const formatDate = (dateStr: string | null): string => {
 };
 
 const ArticleCard = ({ article }: { article: Article }) => {
-  const logoSrc = SOURCE_LOGOS[article.auteur];
+  const [showLogo, setShowLogo] = useState(true);
+  const logoSrc = SOURCE_LOGOS[
+    Object.keys(SOURCE_LOGOS).find(
+      (k) => k.toLowerCase().trim() === article.auteur?.toLowerCase().trim()
+    ) ?? ""
+  ];
 
   return (
     <a
@@ -55,13 +61,25 @@ const ArticleCard = ({ article }: { article: Article }) => {
             <span className="font-body text-[12px] text-secondary">
               {formatDate(article.date_publication)}
             </span>
-            {logoSrc && (
-              <img
-                src={logoSrc}
-                alt={article.auteur}
-                className="w-7 h-7 rounded-full border border-border object-cover"
-              />
-            )}
+            <div className="flex items-center gap-1.5">
+              {logoSrc && showLogo && (
+                <img
+                  src={logoSrc}
+                  alt={article.auteur}
+                  className="w-7 h-7 rounded-full border border-border object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = "none";
+                    setShowLogo(false);
+                  }}
+                />
+              )}
+              <span
+                className="font-body text-[12px] font-medium"
+                style={{ color: "#6B705C", fontFamily: "Lato" }}
+              >
+                {article.auteur}
+              </span>
+            </div>
           </div>
 
           {/* Title */}
@@ -75,7 +93,13 @@ const ArticleCard = ({ article }: { article: Article }) => {
               {article.tags_anatomique.map((tag) => (
                 <span
                   key={tag}
-                  className="inline-block font-body text-[11px] bg-accent-anatomique text-accent-anatomique-foreground px-2.5 py-1 rounded-pill"
+                  className="inline-block font-body text-[11px] px-2.5 py-1"
+                  style={{
+                    backgroundColor: "#D9CBA3",
+                    color: "#3D2B1F",
+                    borderRadius: "24px",
+                    fontFamily: "Lato",
+                  }}
                 >
                   {tag}
                 </span>
@@ -83,7 +107,13 @@ const ArticleCard = ({ article }: { article: Article }) => {
               {article.tags_contenu.map((tag) => (
                 <span
                   key={tag}
-                  className="inline-block font-body text-[11px] bg-accent-contenu text-accent-contenu-foreground px-2.5 py-1 rounded-pill"
+                  className="inline-block font-body text-[11px] px-2.5 py-1"
+                  style={{
+                    backgroundColor: "#C7E8CA",
+                    color: "#1A3C1F",
+                    borderRadius: "24px",
+                    fontFamily: "Lato",
+                  }}
                 >
                   {tag}
                 </span>
