@@ -1,8 +1,8 @@
 export const SOURCE_LOGOS: Record<string, string> = {
   Kinesport: "/logos/kinesport.jpg",
   "Physio-Network": "/logos/physio-network.jpg",
-  KinéauTop: "/logos/kineautop.jpg",
-  "Training Thérapie": "/logos/training-therapie.png",
+  KineauTop: "/logos/kineautop.jpg",
+  "Training Therapie": "/logos/training-therapie.png",
   Physiotutors: "/logos/physiotutors.png",
 };
 
@@ -10,8 +10,8 @@ export const SOURCES = [
   "Tout",
   "Kinesport",
   "Physio-Network",
-  "KinéauTop",
-  "Training Thérapie",
+  "KineauTop",
+  "Training Therapie",
   "Physiotutors",
 ];
 
