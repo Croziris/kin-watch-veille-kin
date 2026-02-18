@@ -1,9 +1,10 @@
-const CACHE_NAME = 'kinewatch-shell-v1';
+const CACHE_NAME = 'kinewatch-shell-v2';
 const SHELL_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/icon-512.png',
+  '/iconkinewatch.jpg',
 ];
 
 self.addEventListener('install', (event) => {
