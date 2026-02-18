@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 const NOTION_API_URL = "https://api.notion.com/v1/databases";
-const DATABASE_ID = "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d";
+const DATABASE_ID = "30b5bbbcdf1780298c67e585f3c49cdc";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
