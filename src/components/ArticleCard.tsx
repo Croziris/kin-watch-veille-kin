@@ -1,5 +1,5 @@
 import { ImageIcon } from "lucide-react";
-import { Article, SOURCE_LOGOS } from "@/lib/constants";
+import { Article, getSourceDisplayName, getSourceLogo } from "@/lib/constants";
 
 const formatDate = (dateStr: string | null): string => {
   if (!dateStr) return "";
@@ -13,7 +13,8 @@ const formatDate = (dateStr: string | null): string => {
 };
 
 const ArticleCard = ({ article }: { article: Article }) => {
-  const logoSrc = SOURCE_LOGOS[article.auteur];
+  const logoSrc = getSourceLogo(article.auteur);
+  const sourceName = getSourceDisplayName(article.auteur);
 
   return (
     <a
@@ -55,12 +56,17 @@ const ArticleCard = ({ article }: { article: Article }) => {
             <span className="font-body text-[12px] text-secondary">
               {formatDate(article.date_publication)}
             </span>
-            {logoSrc && (
-              <img
-                src={logoSrc}
-                alt={article.auteur}
-                className="w-7 h-7 rounded-full border border-border object-cover"
-              />
+            {sourceName && (
+              <span className="inline-flex items-center gap-1.5 rounded-pill bg-[#6B705C] px-2.5 py-1 font-body text-[11px] text-white">
+                {logoSrc && (
+                  <img
+                    src={logoSrc}
+                    alt={sourceName}
+                    className="h-5 w-5 rounded-full object-cover"
+                  />
+                )}
+                <span className="leading-none">{sourceName}</span>
+              </span>
             )}
           </div>
 
@@ -72,17 +78,17 @@ const ArticleCard = ({ article }: { article: Article }) => {
           {/* Tags */}
           {(article.tags_anatomique.length > 0 || article.tags_contenu.length > 0) && (
             <div className="flex flex-wrap gap-1.5 mt-2.5">
-              {article.tags_anatomique.map((tag) => (
+              {article.tags_anatomique.map((tag, index) => (
                 <span
-                  key={tag}
+                  key={`anatomique-${tag}-${index}`}
                   className="inline-block font-body text-[11px] bg-accent-anatomique text-accent-anatomique-foreground px-2.5 py-1 rounded-pill"
                 >
                   {tag}
                 </span>
               ))}
-              {article.tags_contenu.map((tag) => (
+              {article.tags_contenu.map((tag, index) => (
                 <span
-                  key={tag}
+                  key={`contenu-${tag}-${index}`}
                   className="inline-block font-body text-[11px] bg-accent-contenu text-accent-contenu-foreground px-2.5 py-1 rounded-pill"
                 >
                   {tag}

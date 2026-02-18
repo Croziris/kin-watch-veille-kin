@@ -6,6 +6,35 @@ export const SOURCE_LOGOS: Record<string, string> = {
   Physiotutors: "/logos/physiotutors.png",
 };
 
+const normalizeSourceKey = (value: string): string =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+const canonicalSourceKey = (value: string): string =>
+  normalizeSourceKey(value).replace(/[^a-z0-9]/g, "");
+
+export const getSourceLogo = (source: string): string | undefined => {
+  if (!source) return undefined;
+
+  if (SOURCE_LOGOS[source]) {
+    return SOURCE_LOGOS[source];
+  }
+
+  const normalized = normalizeSourceKey(source);
+  const canonical = canonicalSourceKey(source);
+
+  const directMatch = Object.entries(SOURCE_LOGOS).find(
+    ([key]) =>
+      normalizeSourceKey(key) === normalized || canonicalSourceKey(key) === canonical
+  );
+
+  return directMatch?.[1];
+};
+
 export const SOURCES = [
   "Tout",
   "Kinesport",
@@ -36,6 +65,24 @@ export const TAGS_CONTENU = [
   "Nutrition / Récupération",
   "Pratique pro",
 ];
+
+export const getSourceDisplayName = (source: string): string => {
+  if (!source) return "";
+
+  if (SOURCE_LOGOS[source]) {
+    return source;
+  }
+
+  const normalized = normalizeSourceKey(source);
+  const canonical = canonicalSourceKey(source);
+
+  const directMatch = Object.keys(SOURCE_LOGOS).find(
+    (key) =>
+      normalizeSourceKey(key) === normalized || canonicalSourceKey(key) === canonical
+  );
+
+  return directMatch || source;
+};
 
 export interface Article {
   id: string;

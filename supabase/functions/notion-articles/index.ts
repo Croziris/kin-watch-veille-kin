@@ -8,6 +8,158 @@ const corsHeaders = {
 
 const NOTION_API_URL = "https://api.notion.com/v1/databases";
 const DATABASE_ID = "30b5bbbcdf1780298c67e585f3c49cdc";
+const NOTION_VERSION = "2022-06-28";
+
+interface NotionTextFragment {
+  plain_text?: string | null;
+}
+
+interface NotionSelectOption {
+  name?: string | null;
+}
+
+interface NotionPropertyValue {
+  type?: string;
+  title?: NotionTextFragment[];
+  rich_text?: NotionTextFragment[];
+  select?: NotionSelectOption | null;
+  date?: { start?: string | null } | null;
+  url?: string | null;
+  multi_select?: NotionSelectOption[];
+}
+
+interface NotionDatabaseProperty {
+  type?: string;
+  multi_select?: {
+    options?: NotionSelectOption[];
+  };
+}
+
+interface ArticlePayload {
+  id: string;
+  titre: string;
+  auteur: string;
+  date_publication: string | null;
+  lien: string;
+  image_url: string | null;
+  tags_anatomique: string[];
+  tags_contenu: string[];
+}
+
+const normalizeText = (value: string): string =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+const canonicalText = (value: string): string =>
+  normalizeText(value).replace(/[^a-z0-9]/g, "");
+
+const extractTitleValue = (property?: NotionPropertyValue): string =>
+  property?.title?.[0]?.plain_text?.trim() || "";
+
+const extractTextValue = (property?: NotionPropertyValue): string =>
+  property?.rich_text?.[0]?.plain_text?.trim() || property?.select?.name?.trim() || "";
+
+const extractDateValue = (property?: NotionPropertyValue): string | null =>
+  property?.date?.start || null;
+
+const extractUrlValue = (property?: NotionPropertyValue): string =>
+  property?.url?.trim() || "";
+
+const findPropertyName = (
+  properties: Record<string, NotionDatabaseProperty>,
+  preferredNames: string[],
+  keywords: string[],
+  types: string[]
+): string | undefined => {
+  for (const name of preferredNames) {
+    const prop = properties[name];
+    if (prop && types.includes(prop.type || "")) {
+      return name;
+    }
+  }
+
+  const canonicalKeywords = keywords.map(canonicalText);
+  for (const [name, prop] of Object.entries(properties)) {
+    if (!types.includes(prop.type || "")) continue;
+    const candidate = canonicalText(name);
+    if (canonicalKeywords.every((kw) => candidate.includes(kw))) {
+      return name;
+    }
+  }
+
+  return undefined;
+};
+
+const resolveMultiSelectOption = (requested: string, options: NotionSelectOption[]): string => {
+  const cleanRequested = requested.trim();
+  if (!cleanRequested || options.length === 0) return cleanRequested;
+
+  const exact = options.find((option) => option.name === cleanRequested)?.name;
+  if (exact) return exact;
+
+  const normalizedRequested = normalizeText(cleanRequested);
+  const normalizedMatch = options.find(
+    (option) => normalizeText(option.name || "") === normalizedRequested
+  )?.name;
+  if (normalizedMatch) return normalizedMatch;
+
+  const canonicalRequested = canonicalText(cleanRequested);
+  const canonicalMatch = options.find(
+    (option) => canonicalText(option.name || "") === canonicalRequested
+  )?.name;
+  if (canonicalMatch) return canonicalMatch;
+
+  return cleanRequested;
+};
+
+const collectMultiSelectValues = (
+  properties: Record<string, NotionPropertyValue>,
+  preferredNames: Array<string | undefined>,
+  keywords: string[]
+): string[] => {
+  const targetKeys = new Set<string>();
+  const keywordTokens = keywords.map(canonicalText);
+
+  for (const name of preferredNames) {
+    if (name) targetKeys.add(name);
+  }
+
+  for (const [name, prop] of Object.entries(properties)) {
+    if (prop?.type !== "multi_select") continue;
+    const canonicalName = canonicalText(name);
+    if (keywordTokens.every((kw) => canonicalName.includes(kw))) {
+      targetKeys.add(name);
+    }
+  }
+
+  const tags = new Set<string>();
+  for (const key of targetKeys) {
+    const prop = properties[key];
+    if (!prop || prop.type !== "multi_select" || !Array.isArray(prop.multi_select)) continue;
+    for (const item of prop.multi_select) {
+      const tag = item?.name?.trim();
+      if (tag) tags.add(tag);
+    }
+  }
+
+  return Array.from(tags);
+};
+
+const matchesTagFilter = (tags: string[], selectedTag: string | undefined): boolean => {
+  if (!selectedTag || selectedTag === "Tout") return true;
+  const selectedCanonical = canonicalText(selectedTag);
+  if (!selectedCanonical) return true;
+  return tags.some((tag) => canonicalText(tag) === selectedCanonical);
+};
+
+const matchesSourceFilter = (author: string, source: string | undefined): boolean => {
+  if (!source || source === "Tout") return true;
+  return canonicalText(author) === canonicalText(source);
+};
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -23,35 +175,114 @@ serve(async (req) => {
   }
 
   try {
-    const { start_cursor, source, tag_anatomique, tag_contenu } = await req.json();
+    const payload = await req.json();
+    const start_cursor = typeof payload?.start_cursor === "string" ? payload.start_cursor : undefined;
+    const source = typeof payload?.source === "string" ? payload.source : undefined;
+    const tag_anatomique =
+      typeof payload?.tag_anatomique === "string" ? payload.tag_anatomique : undefined;
+    const tag_contenu =
+      typeof payload?.tag_contenu === "string" ? payload.tag_contenu : undefined;
+
+    const notionHeaders = {
+      Authorization: `Bearer ${NOTION_API_KEY}`,
+      "Notion-Version": NOTION_VERSION,
+      "Content-Type": "application/json",
+    };
+
+    const databaseResponse = await fetch(`${NOTION_API_URL}/${DATABASE_ID}`, {
+      method: "GET",
+      headers: notionHeaders,
+    });
+
+    if (!databaseResponse.ok) {
+      const errorText = await databaseResponse.text();
+      throw new Error(`Notion database error [${databaseResponse.status}]: ${errorText}`);
+    }
+
+    const databaseData = await databaseResponse.json();
+    const dbProperties = (databaseData.properties || {}) as Record<string, NotionDatabaseProperty>;
+
+    const titlePropertyName =
+      findPropertyName(dbProperties, ["Titre"], ["titre"], ["title"]) || "Titre";
+    const authorPropertyName =
+      findPropertyName(dbProperties, ["Auteur"], ["auteur"], ["rich_text", "select"]) || "Auteur";
+    const datePropertyName =
+      findPropertyName(
+        dbProperties,
+        ["Date de publication"],
+        ["date", "publication"],
+        ["date"]
+      ) || "Date de publication";
+    const linkPropertyName =
+      findPropertyName(dbProperties, ["Lien"], ["lien"], ["url"]) || "Lien";
+    const imagePropertyName =
+      findPropertyName(
+        dbProperties,
+        ["URL de l'image", "Image"],
+        ["image"],
+        ["url", "files"]
+      ) || "URL de l'image";
+    const anatomyPropertyName =
+      findPropertyName(
+        dbProperties,
+        ["Tag anatomique", "Tags anatomiques", "Tags Anatomique"],
+        ["anatom"],
+        ["multi_select"]
+      ) || "Tag anatomique";
+    const contentPropertyName =
+      findPropertyName(
+        dbProperties,
+        ["Tag contenu", "Tags contenu", "Tags Contenu"],
+        ["contenu"],
+        ["multi_select"]
+      ) || "Tag contenu";
+
+    const anatomyOptions = dbProperties[anatomyPropertyName]?.multi_select?.options || [];
+    const contentOptions = dbProperties[contentPropertyName]?.multi_select?.options || [];
+
+    const resolvedAnatomyTag =
+      tag_anatomique && tag_anatomique !== "Tout"
+        ? resolveMultiSelectOption(tag_anatomique, anatomyOptions)
+        : undefined;
+    const resolvedContentTag =
+      tag_contenu && tag_contenu !== "Tout"
+        ? resolveMultiSelectOption(tag_contenu, contentOptions)
+        : undefined;
 
     // Build filters
-    const filters: any[] = [];
+    const filters: Record<string, unknown>[] = [];
+    let notionSourceFilterApplied = false;
+    let notionAnatomyFilterApplied = false;
+    let notionContentFilterApplied = false;
 
-    if (source && source !== "Tout") {
-      filters.push({
-        property: "Auteur",
-        rich_text: { equals: source },
-      });
+    const authorPropertyType = dbProperties[authorPropertyName]?.type;
+    if (source && source !== "Tout" && authorPropertyType === "rich_text") {
+      filters.push({ property: authorPropertyName, rich_text: { equals: source } });
+      notionSourceFilterApplied = true;
+    } else if (source && source !== "Tout" && authorPropertyType === "select") {
+      filters.push({ property: authorPropertyName, select: { equals: source } });
+      notionSourceFilterApplied = true;
     }
 
-    if (tag_anatomique && tag_anatomique !== "Tout") {
+    if (resolvedAnatomyTag && dbProperties[anatomyPropertyName]?.type === "multi_select") {
       filters.push({
-        property: "Tag anatomique",
-        multi_select: { contains: tag_anatomique },
+        property: anatomyPropertyName,
+        multi_select: { contains: resolvedAnatomyTag },
       });
+      notionAnatomyFilterApplied = true;
     }
 
-    if (tag_contenu && tag_contenu !== "Tout") {
+    if (resolvedContentTag && dbProperties[contentPropertyName]?.type === "multi_select") {
       filters.push({
-        property: "Tag contenu",
-        multi_select: { contains: tag_contenu },
+        property: contentPropertyName,
+        multi_select: { contains: resolvedContentTag },
       });
+      notionContentFilterApplied = true;
     }
 
-    const body: any = {
+    const body: Record<string, unknown> = {
       page_size: 100,
-      sorts: [{ property: "Date de publication", direction: "descending" }],
+      sorts: [{ property: datePropertyName, direction: "descending" }],
     };
 
     if (filters.length === 1) {
@@ -66,11 +297,7 @@ serve(async (req) => {
 
     const response = await fetch(`${NOTION_API_URL}/${DATABASE_ID}/query`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${NOTION_API_KEY}`,
-        "Notion-Version": "2022-06-28",
-        "Content-Type": "application/json",
-      },
+      headers: notionHeaders,
       body: JSON.stringify(body),
     });
 
@@ -79,21 +306,48 @@ serve(async (req) => {
       throw new Error(`Notion API error [${response.status}]: ${errorText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as {
+      results: Array<{ id: string; properties: Record<string, NotionPropertyValue> }>;
+      has_more: boolean;
+      next_cursor: string | null;
+    };
 
     // Transform results
-    const articles = data.results.map((page: any) => {
+    const articles = data.results.map((page) => {
       const props = page.properties;
+      const tagsAnatomique = collectMultiSelectValues(
+        props,
+        [anatomyPropertyName, "Tag anatomique", "Tags anatomiques", "Tags Anatomique"],
+        ["anatom"]
+      );
+      const tagsContenu = collectMultiSelectValues(
+        props,
+        [contentPropertyName, "Tag contenu", "Tags contenu", "Tags Contenu"],
+        ["contenu"]
+      );
+
       return {
         id: page.id,
-        titre: props["Titre"]?.title?.[0]?.plain_text || "",
-        auteur: props["Auteur"]?.rich_text?.[0]?.plain_text || "",
-        date_publication: props["Date de publication"]?.date?.start || null,
-        lien: props["Lien"]?.url || "",
-        image_url: props["URL de l'image"]?.url || null,
-        tags_anatomique: props["Tag anatomique"]?.multi_select?.map((t: any) => t.name) || [],
-        tags_contenu: props["Tag contenu"]?.multi_select?.map((t: any) => t.name) || [],
-      };
+        titre: extractTitleValue(props[titlePropertyName]) || extractTitleValue(props["Titre"]),
+        auteur: extractTextValue(props[authorPropertyName]) || extractTextValue(props["Auteur"]),
+        date_publication:
+          extractDateValue(props[datePropertyName]) || extractDateValue(props["Date de publication"]),
+        lien: extractUrlValue(props[linkPropertyName]) || extractUrlValue(props["Lien"]),
+        image_url: extractUrlValue(props[imagePropertyName]) || extractUrlValue(props["URL de l'image"]) || null,
+        tags_anatomique: tagsAnatomique,
+        tags_contenu: tagsContenu,
+      } as ArticlePayload;
+    }).filter((article) => {
+      const sourceMatches = notionSourceFilterApplied
+        ? true
+        : matchesSourceFilter(article.auteur, source);
+      const anatomyMatches = notionAnatomyFilterApplied
+        ? true
+        : matchesTagFilter(article.tags_anatomique, tag_anatomique);
+      const contentMatches = notionContentFilterApplied
+        ? true
+        : matchesTagFilter(article.tags_contenu, tag_contenu);
+      return sourceMatches && anatomyMatches && contentMatches;
     });
 
     return new Response(
