@@ -6,6 +6,7 @@ import FilterBar from "@/components/FilterBar";
 import ArticleCard from "@/components/ArticleCard";
 import LoadingSkeletons from "@/components/LoadingSkeletons";
 import EmptyState from "@/components/EmptyState";
+import PwaInstallPrompt from "@/components/PwaInstallPrompt";
 import { Article } from "@/lib/constants";
 
 const Index = () => {
@@ -75,6 +76,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background pb-8">
       <Header />
+      <PwaInstallPrompt />
 
       {/* Spacer for fixed header */}
       <div className="h-[68px]" />
