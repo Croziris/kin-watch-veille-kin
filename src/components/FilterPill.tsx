@@ -1,4 +1,4 @@
-import { SOURCE_LOGOS } from "@/lib/constants";
+import { getSourceLogo } from "@/lib/constants";
 
 interface FilterPillProps {
   label: string;
@@ -9,6 +9,8 @@ interface FilterPillProps {
 }
 
 const FilterPill = ({ label, active, onClick, variant, showLogo }: FilterPillProps) => {
+  const logoSrc = getSourceLogo(label);
+
   const activeClasses = {
     source: "bg-primary text-primary-foreground border-transparent",
     anatomique: "bg-accent-anatomique text-accent-anatomique-foreground border-transparent",
@@ -24,9 +26,9 @@ const FilterPill = ({ label, active, onClick, variant, showLogo }: FilterPillPro
         active ? activeClasses[variant] : inactiveClass
       }`}
     >
-      {showLogo && label !== "Tout" && SOURCE_LOGOS[label] && (
+      {showLogo && label !== "Tout" && logoSrc && (
         <img
-          src={SOURCE_LOGOS[label]}
+          src={logoSrc}
           alt=""
           className="w-4 h-4 rounded-full object-cover"
         />
