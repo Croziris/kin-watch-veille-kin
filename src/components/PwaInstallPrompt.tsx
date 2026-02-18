@@ -18,10 +18,13 @@ const PwaInstallPrompt = () => {
   const [hasWaited, setHasWaited] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [showIosGuide, setShowIosGuide] = useState(false);
 
-  const isIos = useMemo(
-    () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase()),
-    []
+  const userAgent = useMemo(() => window.navigator.userAgent.toLowerCase(), []);
+  const isIos = useMemo(() => /iphone|ipad|ipod/.test(userAgent), [userAgent]);
+  const isIosSafari = useMemo(
+    () => isIos && /safari/.test(userAgent) && !/crios|fxios|edgios|opios/.test(userAgent),
+    [isIos, userAgent]
   );
 
   const canInstall = Boolean(deferredPrompt) || isIos;
@@ -45,16 +48,25 @@ const PwaInstallPrompt = () => {
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setShowPrompt(false);
+      setShowIosGuide(false);
       setDeferredPrompt(null);
       window.localStorage.removeItem(DISMISS_STORAGE_KEY);
     };
 
+    const refreshInstallState = () => {
+      setIsInstalled(isStandaloneMode());
+    };
+
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     window.addEventListener("appinstalled", handleAppInstalled);
+    window.addEventListener("focus", refreshInstallState);
+    document.addEventListener("visibilitychange", refreshInstallState);
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
       window.removeEventListener("appinstalled", handleAppInstalled);
+      window.removeEventListener("focus", refreshInstallState);
+      document.removeEventListener("visibilitychange", refreshInstallState);
     };
   }, []);
 
@@ -66,13 +78,14 @@ const PwaInstallPrompt = () => {
 
   const closePrompt = () => {
     setShowPrompt(false);
+    setShowIosGuide(false);
     setDismissed(true);
     window.localStorage.setItem(DISMISS_STORAGE_KEY, "1");
   };
 
   const installFromPrompt = async () => {
     if (isIos) {
-      setShowPrompt(false);
+      setShowIosGuide(true);
       return;
     }
 
@@ -89,6 +102,7 @@ const PwaInstallPrompt = () => {
   const installFromFloatingButton = async () => {
     if (isIos) {
       setShowPrompt(true);
+      setShowIosGuide(true);
       return;
     }
 
@@ -122,23 +136,33 @@ const PwaInstallPrompt = () => {
                 Installer KinéWatch
               </p>
               <p className="mt-1 font-body text-[13px] leading-relaxed text-secondary">
-                Installe l’app pour un meilleur confort mobile et un accès direct à ta veille.
+                Installe l'app pour un meilleur confort mobile et un accès direct à ta veille.
               </p>
             </div>
           </div>
 
-          {isIos && (
-            <p className="mt-3 rounded-xl bg-muted px-3 py-2 font-body text-[12px] text-foreground">
-              Sur iPhone/iPad: touche Partager puis Ajouter à l’écran d’accueil.
-            </p>
+          {isIos && showIosGuide && (
+            <div className="mt-3 rounded-xl bg-muted px-3 py-2">
+              {!isIosSafari && (
+                <p className="font-body text-[12px] text-foreground">
+                  Tu es dans un navigateur iOS tiers. Ouvre cette page dans Safari pour installer
+                  l'app.
+                </p>
+              )}
+              <ol className="mt-2 list-decimal space-y-1 pl-4 font-body text-[12px] text-foreground">
+                <li>Touche l'icône Partager (carré avec flèche vers le haut).</li>
+                <li>Sélectionne Sur l'écran d'accueil.</li>
+                <li>Confirme avec Ajouter.</li>
+              </ol>
+            </div>
           )}
 
           <button
-            onClick={installFromPrompt}
+            onClick={isIos && showIosGuide ? closePrompt : installFromPrompt}
             className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-pill bg-primary px-4 py-2.5 font-body text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
           >
             <Download className="h-4 w-4" />
-            {isIos ? "Voir comment installer" : "Installer l'app"}
+            {isIos ? (showIosGuide ? "J'ai compris" : "Voir les étapes") : "Installer l'app"}
           </button>
         </div>
       )}
